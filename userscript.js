@@ -383,9 +383,8 @@
         const grid = document.createElement('div');
         grid.id = 'network-gallery-grid';
         Object.assign(grid.style, {
-            flex: '1', overflowY: 'auto', padding: '0px', display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)', gap: '3px', minHeight: '0',
-            alignContent: 'start'
+            flex: '1', overflowY: 'auto', padding: '0px', display: 'flex',
+            flexWrap: 'wrap', gap: '3px', minHeight: '0', alignContent: 'flex-start'
         });
 
         popup.appendChild(header);
@@ -523,13 +522,18 @@
             link.onclick = function () { openLightbox(data); };
             
             Object.assign(link.style, {
-                position: 'relative', width: '100%', paddingBottom: '100%', backgroundColor: '#000',
+                position: 'relative', width: 'calc(33.333% - 2px)', backgroundColor: '#000',
                 display: 'block', overflow: 'hidden'
             });
 
             // Replaced the arrow functions here to fix the lines 173 and 174 syntax errors
             link.onmouseenter = function () { this.style.opacity = '0.8'; };
             link.onmouseleave = function () { this.style.opacity = '1'; };
+
+            const spacer = document.createElement('div');
+            spacer.style.width = '100%';
+            spacer.style.paddingBottom = '100%';
+            link.appendChild(spacer);
 
             const img = document.createElement('img');
             img.src = data.mediaUrl;
