@@ -196,13 +196,132 @@
             popup.style.display = 'none';
         };
 
+        const ffContainer = document.createElement('div');
+        Object.assign(ffContainer.style, {
+            display: 'flex', alignItems: 'center', marginRight: '16px', marginLeft: 'auto',
+            backgroundColor: '#202327', borderRadius: '999px', padding: '4px', border: '1px solid #333639'
+        });
+        
+        const ffInput = document.createElement('input');
+        ffInput.type = 'number';
+        ffInput.placeholder = 'Item #';
+        Object.assign(ffInput.style, {
+            background: 'transparent', border: 'none', color: 'white', width: '60px',
+            padding: '4px 8px', outline: 'none', fontFamily: 'system-ui, sans-serif',
+            fontSize: '14px', textAlign: 'center'
+        });
+        
+        const ffBtn = document.createElement('button');
+        ffBtn.innerText = '⏩ Skip To';
+        Object.assign(ffBtn.style, {
+            padding: '6px 12px', backgroundColor: 'rgb(29, 155, 240)', color: 'white',
+            border: 'none', borderRadius: '999px', cursor: 'pointer', fontWeight: 'bold',
+            fontSize: '12px', fontFamily: 'system-ui, sans-serif'
+        });
+        
+        ffContainer.appendChild(ffInput);
+        ffContainer.appendChild(ffBtn);
+        
         const loadMoreBtn = document.createElement('button');
         loadMoreBtn.innerText = '⬇️ Fetch More Media';
         Object.assign(loadMoreBtn.style, {
             padding: '8px 16px', backgroundColor: '#eff3f4', color: '#0f1419',
             border: 'none', borderRadius: '999px', cursor: 'pointer', fontWeight: 'bold',
-            marginLeft: 'auto', marginRight: '16px', fontSize: '14px', fontFamily: 'system-ui, sans-serif'
+            marginRight: '16px', fontSize: '14px', fontFamily: 'system-ui, sans-serif'
         });
+        
+        ffBtn.onclick = async function() {
+            const targetCount = parseInt(ffInput.value);
+            if (!targetCount || isNaN(targetCount) || targetCount <= galleryData.size) return;
+            
+            if (!window.lastTwitterRequest || !window.nextTwitterCursor) {
+                 loadMoreBtn.click();
+                 ffBtn.innerText = 'Initializing...';
+                 const checkInterval = setInterval(function() {
+                     if (window.lastTwitterRequest && window.nextTwitterCursor) {
+                         clearInterval(checkInterval);
+                         ffBtn.click();
+                     } else if (loadMoreBtn.innerText.includes('Failed')) {
+                         clearInterval(checkInterval);
+                         ffBtn.innerText = '⏩ Skip To';
+                     }
+                 }, 500);
+                 return;
+            }
+            
+            ffInput.disabled = true;
+            ffBtn.disabled = true;
+            loadMoreBtn.disabled = true;
+            
+            let retryCount = 0;
+            
+            async function fetchLoop() {
+                if (galleryData.size >= targetCount || !window.nextTwitterCursor) {
+                    ffBtn.innerText = 'Done! ✅';
+                    setTimeout(function() {
+                        ffInput.disabled = false;
+                        ffBtn.disabled = false;
+                        loadMoreBtn.disabled = false;
+                        ffBtn.innerText = '⏩ Skip To';
+                        ffInput.value = '';
+                    }, 2000);
+                    return;
+                }
+                
+                ffBtn.innerText = 'Skipping... (' + galleryData.size + '/' + targetCount + ')';
+                const req = window.lastTwitterRequest;
+                const urlObj = new URL(req.url, window.location.origin);
+                const varsStr = urlObj.searchParams.get('variables');
+                if (varsStr) {
+                    const vars = JSON.parse(varsStr);
+                    vars.cursor = window.nextTwitterCursor;
+                    urlObj.searchParams.set('variables', JSON.stringify(vars));
+                    
+                    try {
+                        const res = await originalFetch(urlObj.toString(), { headers: req.headers });
+                        if (res.status === 429) {
+                            ffBtn.innerText = 'Rate limit! Waiting 3s...';
+                            setTimeout(fetchLoop, 3000);
+                            return;
+                        }
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        
+                        const data = await res.json();
+                        const oldCursor = window.nextTwitterCursor;
+                        parseTwitterJSON(data);
+                        
+                        if (oldCursor === window.nextTwitterCursor) {
+                             ffBtn.innerText = 'End of timeline!';
+                             setTimeout(function() {
+                                 ffInput.disabled = false;
+                                 ffBtn.disabled = false;
+                                 loadMoreBtn.disabled = false;
+                                 ffBtn.innerText = '⏩ Skip To';
+                             }, 2000);
+                             return;
+                        }
+                        
+                        retryCount = 0;
+                        setTimeout(fetchLoop, 350); 
+                    } catch(e) {
+                        retryCount++;
+                        if (retryCount < 3) {
+                            ffBtn.innerText = 'Retrying...';
+                            setTimeout(fetchLoop, 1500);
+                        } else {
+                            ffBtn.innerText = 'Error! ❌';
+                            setTimeout(function() {
+                                ffInput.disabled = false;
+                                ffBtn.disabled = false;
+                                loadMoreBtn.disabled = false;
+                                ffBtn.innerText = '⏩ Skip To';
+                            }, 2000);
+                        }
+                    }
+                }
+            }
+            fetchLoop();
+        };
         
         loadMoreBtn.onclick = function() {
             if (!window.lastTwitterRequest || !window.nextTwitterCursor) {
@@ -257,6 +376,7 @@
         };
 
         header.appendChild(title);
+        header.appendChild(ffContainer);
         header.appendChild(loadMoreBtn);
         header.appendChild(closeBtn);
 
@@ -331,69 +451,6 @@
         });
         tweetLink.onclick = function (e) { e.stopPropagation(); };
         viewer.appendChild(tweetLink);
-
-        const bookmarkBtn = document.createElement('button');
-        bookmarkBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: white;"><path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z"></path></svg>';
-        Object.assign(bookmarkBtn.style, {
-            position: 'absolute', bottom: '24px', left: '24px', background: 'rgba(0,0,0,0.5)',
-            border: 'none', borderRadius: '50%', width: '48px', height: '48px',
-            cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center',
-            transition: 'transform 0.2s'
-        });
-        
-        bookmarkBtn.onclick = async function(e) {
-            e.stopPropagation();
-            if (!window.lastTwitterRequest) return alert('Timeline API keys not captured yet.');
-            
-            const originalHTML = bookmarkBtn.innerHTML;
-            bookmarkBtn.innerHTML = '⏳';
-            
-            if (!window.bookmarkQueryId) {
-                const scriptUrls = Array.from(document.querySelectorAll('script[src]'))
-                    .map(function(s) { return s.src; })
-                    .filter(function(src) { return src.includes('client-web/'); });
-                    
-                await Promise.all(scriptUrls.map(async function(url) {
-                    if (window.bookmarkQueryId) return;
-                    try {
-                        const text = await fetch(url).then(function(r) { return r.text(); });
-                        const match = text.match(/queryId:"([^"]+)",operationName:"CreateBookmark"/);
-                        if (match) window.bookmarkQueryId = match[1];
-                    } catch(err) {}
-                }));
-            }
-            
-            if (!window.bookmarkQueryId) {
-                bookmarkBtn.innerHTML = '❌';
-                setTimeout(function() { bookmarkBtn.innerHTML = originalHTML; }, 2000);
-                return;
-            }
-            
-            const targetId = data.tweetUrl.split('/status/').pop().split('?')[0];
-            const url = 'https://' + window.location.host + '/i/api/graphql/' + window.bookmarkQueryId + '/CreateBookmark';
-            const payload = {
-                variables: { tweet_id: targetId },
-                queryId: window.bookmarkQueryId
-            };
-            
-            try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: Object.assign({}, window.lastTwitterRequest.headers, { 'content-type': 'application/json' }),
-                    body: JSON.stringify(payload)
-                });
-                const json = await res.json();
-                if (json.errors) throw new Error('API Error');
-                
-                bookmarkBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: rgb(29, 155, 240);"><path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5z"></path></svg>';
-                bookmarkBtn.style.transform = 'scale(1.2)';
-                setTimeout(function() { bookmarkBtn.style.transform = 'scale(1)'; }, 200);
-            } catch (err) {
-                bookmarkBtn.innerHTML = '❌';
-                setTimeout(function() { bookmarkBtn.innerHTML = originalHTML; }, 2000);
-            }
-        };
-        viewer.appendChild(bookmarkBtn);
 
         const mediaArray = Array.from(galleryData.values());
         const currentIndex = mediaArray.findIndex(function (m) { return m.mediaUrl === data.mediaUrl; });
